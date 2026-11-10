@@ -1,0 +1,157 @@
+-- flick_cheat.lua -------------------------------------------------
+-- ESP, aimbot и God‑mode для Roblox‑игры Flick
+-- Работает в мобильном клиенте через Delta X (или любой executor)
+
+-- 1. Подключаем Delta X (если уже загружена, используем её)
+local DeltaX = _G.DeltaX or loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/DeltaXTeam/DeltaX/main/DeltaX.lua"
+))()
+if DeltaX then DeltaX:Bypass() end
+
+-- 2. Настройки
+local Settings = {
+    ESP       = true,
+    Aimbot    = true,
+    GodMode   = true,
+    FOV       = 110,          -- радиус автоприцела (пиксели)
+    Smooth    = 0.22,         -- плавность аима (0‑1)
+    ESPColor  = Color3.fromRGB(0,255,0),
+    GodHealth = 1e9,
+}
+
+-- 3. UI‑кнопка‑триггер
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "FlickCheatGui"
+Gui.ResetOnSpawn = false
+Gui.Parent = game:GetService("CoreGui")
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0,48,0,48)
+ToggleBtn.Position = UDim2.new(1,-58,0,10)   -- правый верхний угол
+ToggleBtn.BackgroundTransparency = 0.4
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0,0,0)
+ToggleBtn.Text = "⚙"
+ToggleBtn.TextScaled = true
+ToggleBtn.TextColor3 = Color3.fromRGB(0,255,0)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = Gui
+
+local Menu = Instance.new("Frame")
+Menu.Size = UDim2.new(0,220,0,150)
+Menu.Position = UDim2.new(0.5,-110,0.5,-75)
+Menu.BackgroundTransparency = 0.6
+Menu.BackgroundColor3 = Color3.fromRGB(20,20,20)
+Menu.BorderSizePixel = 0
+Menu.Visible = false
+Menu.Parent = Gui
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    Menu.Visible = not Menu.Visible
+end)
+
+-- 4. Переключатели в меню
+local function createToggle(name, default, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,-20,0,30)
+    btn.Position = UDim2.new(0,10,0,(#Menu:GetChildren()-1)*35+10)
+    btn.BackgroundTransparency = 0.3
+    btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextScaled = true
+    btn.Text = name..": "..(default and "ON" or "OFF")
+    btn.Parent = Menu
+
+    btn.MouseButton1Click:Connect(function()
+        default = not default
+        btn.Text = name..": "..(default and "ON" or "OFF")
+        callback(default)
+    end)
+end
+
+createToggle("ESP", Settings.ESP, function(v) Settings.ESP = v end)
+createToggle("Aimbot", Settings.Aimbot, function(v) Settings.Aimbot = v end)
+createToggle("GodMode", Settings.GodMode, function(v) Settings.GodMode = v end)
+
+-- 5. ESP (коробка вокруг головы)
+local espCache = {}
+local function makeBox(plr)
+    if not plr.Character or not plr.Character:FindFirstChild("Head") then return end
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = plr.Character.Head
+    box.Size = Vector3.new(4,5,1)
+    box.Transparency = 0.5
+    box.Color3 = Settings.ESPColor
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Parent = plr.Character.Head
+    return box
+end
+
+local function updateESP()
+    for _,plr in ipairs(game.Players:GetPlayers()) do
+        if plr ~= game.Players.LocalPlayer then
+            if Settings.ESP then
+                if not espCache[plr] then espCache[plr] = makeBox(plr) end
+            else
+                if espCache[plr] then espCache[plr]:Destroy(); espCache[plr] = nil end
+            end
+        end
+    end
+end
+
+-- 6. Aimbot
+local UIS = game:GetService("UserInputService")
+local cam = workspace.CurrentCamera
+
+local function getClosest()
+    local mousePos = UIS:GetMouseLocation()
+    local closest, bestDist = nil, Settings.FOV
+    for _,plr in ipairs(game.Players:GetPlayers()) do
+        if plr ~= game.Players.LocalPlayer and plr.Character
+            and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local worldPos = plr.Character.HumanoidRootPart.Position
+            local screenPos, onScreen = cam:WorldToScreenPoint(worldPos)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).magnitude
+                if dist < bestDist then
+                    bestDist = dist
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function aimAt(target)
+    if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
+    local pos = target.Character.HumanoidRootPart.Position
+    local desired = CFrame.new(cam.CFrame.Position, pos)
+    cam.CFrame = cam.CFrame:Lerp(desired, Settings.Smooth)
+end
+
+-- 7. God‑Mode
+local function applyGod()
+    if Settings.GodMode then
+        local hum = game.Players.LocalPlayer.Character and
+                    game.Players.LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+        if hum then
+            hum.MaxHealth = Settings.GodHealth
+            hum.Health = Settings.GodHealth
+        end
+    end
+end
+
+-- 8. Главный цикл
+game:GetService("RunService").RenderStepped:Connect(function()
+    updateESP()
+    if Settings.Aimbot then
+        local tgt = getClosest()
+        aimAt(tgt)
+    end
+    applyGod()
+end)
+
+print("[Flick Cheat] Скрипт запущен – нажмите ⚙ в правом верхнем углу, чтобы открыть меню")
+-- ----------------------------------------------------------------
